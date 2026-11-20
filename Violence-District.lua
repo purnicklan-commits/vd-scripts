@@ -1163,52 +1163,65 @@ end
 local UpdateDaggerAim, RenderDaggerTrajectory, RebuildDaggerGradient
 
 do
-    local aimAnimations = {
-        ["77303734522729"] = "Hold", ["87436543050891"] = "Hold",
-        ["79809716042968"] = "Hold", ["122765810542358"] = "Hold",
-        ["101443662521580"] = "Throw", ["127622545856523"] = "Throw",
+    local cfg = {
+        AimAnimations = {
+            ["77303734522729"] = "Hold", ["87436543050891"] = "Hold",
+            ["79809716042968"] = "Hold", ["122765810542358"] = "Hold",
+            ["101443662521580"] = "Throw", ["127622545856523"] = "Throw",
+        },
+        Gravity = 96.5,
+        Lag = .0375,
+        AimTimeout = 1,
+        Height = 1.6,
+        Step = .04,
+        MaxTime = 6,
+        MaxDrop = 80,
+        GroundOffset = 3,
+        LocalRightOffset = 1.5,
+        LocalForwardOffset = .1,
+        GradientSteps = 32,
+        HitRadius = 1.8,
+        LegHalfHeight = 1,
+        HeadTop = 1,
+        HitSamples = 4,
     }
-    local charge = {Max = 163.5, Min = 68, PerSecond = 156, Offset = 6.3}
-    charge.At = function(now)
-        local held = if charge.HeldSince then now - charge.HeldSince else 0
-        return math.clamp(held * charge.PerSecond + charge.Offset, charge.Min, charge.Max)
-    end
-    local daggerGravity = 96.5
-    local daggerLag = .0375
-    local aimTimeout = 1
-    local daggerHeight = 1.6
-    local daggerStep = .04
-    local daggerMaxTime = 6
-    local daggerMaxDrop = 80
-    local groundOffset = 3
-    local localRightOffset = 1.5
-    local localForwardOffset = .1
-    local gradientSteps = 32
-    local hitRadius = 1.8
-    local legHalfHeight = 1
-    local headTop = 1
-    local hitSamples = 4
-    local throwers, targets, motions = {}, {}, {}
-    local ownRoot, ownIsSurvivor
-    local nextRefresh = 0
-    local arcPoints = {}
+    local state = {
+        Charge = {Max = 163.5, Min = 68, PerSecond = 156, Offset = 6.3},
+        Throwers = {},
+        Targets = {},
+        Motions = {},
+        OwnRoot = nil,
+        OwnIsSurvivor = false,
+        NextRefresh = 0,
+        ArcPoints = {},
+        Gradient = {},
+        HitGradient = {},
+        MissGradient = {},
+    }
+    local helper = {}
 
-    local function LerpColor(a, b, t)
+    function helper.ChargeAt(now)
+        local c = state.Charge
+        local held = if c.HeldSince then now - c.HeldSince else 0
+        return math.clamp(held * c.PerSecond + c.Offset, c.Min, c.Max)
+    end
+
+    function helper.LerpColor(a, b, t)
         return Color3.new(a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t)
     end
 
-    local gradient, hitGradient, missGradient = {}, {}, {}
     RebuildDaggerGradient = function()
-        for i = 0, gradientSteps do
-            local fraction = i / gradientSteps
-            gradient[i] = LerpColor(daggerColor, daggerEndColor, fraction)
-            hitGradient[i] = LerpColor(Color3.fromRGB(255, 120, 50), Color3.fromRGB(255, 30, 30), fraction)
-            missGradient[i] = LerpColor(Color3.fromRGB(255, 250, 170), Color3.fromRGB(255, 215, 30), fraction)
+        local steps = cfg.GradientSteps
+        for i = 0, steps do
+            local fraction = i / steps
+            state.Gradient[i] = helper.LerpColor(daggerColor, daggerEndColor, fraction)
+            state.HitGradient[i] = helper.LerpColor(Color3.fromRGB(255, 120, 50), Color3.fromRGB(255, 30, 30), fraction)
+            state.MissGradient[i] = helper.LerpColor(Color3.fromRGB(255, 250, 170), Color3.fromRGB(255, 215, 30), fraction)
         end
     end
     RebuildDaggerGradient()
 
-    local function AnimatorOf(character)
+    function helper.AnimatorOf(character)
         local humanoid = character and character:FindFirstChild("Humanoid")
         local animator = humanoid and humanoid:FindFirstChild("Animator")
         local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -1216,14 +1229,14 @@ do
         return nil
     end
 
-    local function Refresh()
+    function helper.Refresh()
         local states = {}
-        for _, thrower in throwers do states[thrower.Animator] = thrower.State end
+        for _, thrower in state.Throwers do states[thrower.Animator] = thrower.State end
         local list, roots, newMotions = {}, {}, {}
         local localPlayer = Players.LocalPlayer
         local localTeam = TeamName(localPlayer)
-        local animator, root = AnimatorOf(localPlayer.Character)
-        ownRoot, ownIsSurvivor = root, localTeam == "Survivors"
+        local animator, root = helper.AnimatorOf(localPlayer.Character)
+        state.OwnRoot, state.OwnIsSurvivor = root, localTeam == "Survivors"
         if animator and localTeam == "Killer" then
             list[#list + 1] = {Animator = animator, Root = root, IsLocal = true, State = states[animator] or {}}
         end
@@ -1233,10 +1246,10 @@ do
                 local team = TeamName(player)
                 if team and team ~= "Spectator" then
                     local character = player.Character
-                    local otherAnimator, otherRoot = AnimatorOf(character)
+                    local otherAnimator, otherRoot = helper.AnimatorOf(character)
                     if otherAnimator then
                         local id = otherRoot.Address
-                        local motion = motions[id] or {}
+                        local motion = state.Motions[id] or {}
                         newMotions[id] = motion
                         roots[#roots + 1] = {
                             Team = team, Motion = motion, Root = otherRoot,
@@ -1251,14 +1264,14 @@ do
                 end
             end
         end
-        throwers, targets, motions = list, roots, newMotions
+        state.Throwers, state.Targets, state.Motions = list, roots, newMotions
     end
 
-    local function UpdateAimState(state, animator, now)
+    function helper.UpdateAimState(aimState, animator, now)
         local head = memory_read("uintptr_t", animator + activeAnimationsOffset)
         local count = memory_read("uintptr_t", animator + activeAnimationsOffset + 8)
         if not Valid(head) or not count or count > 256 then return end
-        local previous, current = state.Tracks, {}
+        local previous, current = aimState.Tracks, {}
         local holding = false
         local node = memory_read("uintptr_t", head)
         for _ = 1, count do
@@ -1267,20 +1280,20 @@ do
             if Valid(track) then
                 current[track] = true
                 local animation = memory_read("uintptr_t", track + trackAnimationOffset)
-                local kind = Valid(animation) and aimAnimations[ReadAnimationId(animation)]
+                local kind = Valid(animation) and cfg.AimAnimations[ReadAnimationId(animation)]
                 local isNew = not previous or not previous[track]
-                if kind == "Hold" then holding = true if isNew then state.Aiming = true end
-                elseif kind == "Throw" and isNew then state.Aiming = false state.ThrownAt = now end
+                if kind == "Hold" then holding = true if isNew then aimState.Aiming = true end
+                elseif kind == "Throw" and isNew then aimState.Aiming = false aimState.ThrownAt = now end
             end
             node = memory_read("uintptr_t", node)
         end
-        if state.ThrownAt == now then state.Aiming = false end
-        if holding then state.LastHold = now
-        elseif state.Aiming and (not state.LastHold or now - state.LastHold > aimTimeout) then state.Aiming = false end
-        state.Tracks = current
+        if aimState.ThrownAt == now then aimState.Aiming = false end
+        if holding then aimState.LastHold = now
+        elseif aimState.Aiming and (not aimState.LastHold or now - aimState.LastHold > cfg.AimTimeout) then aimState.Aiming = false end
+        aimState.Tracks = current
     end
 
-    local function UpdateMotion(motion, position, now)
+    function helper.UpdateMotion(motion, position, now)
         local dt = motion.LastTime and now - motion.LastTime
         if not dt or dt > .5 then
             motion.LastPosition, motion.LastTime, motion.Velocity = position, now, Vector3.new(0, 0, 0)
@@ -1293,18 +1306,18 @@ do
         motion.LastPosition, motion.LastTime = position, now
     end
 
-    local function DrawStraight(origin, finish, colors)
+    function helper.DrawStraight(origin, finish, colors)
         local previousX, previousY
         for i = 0, 40 do
             local fraction = i / 40
             local point = origin + (finish - origin) * fraction
             local x, y = Project(point.X, point.Y, point.Z)
-            if x and previousX then DrawLine(previousX, previousY, x, y, colors[math.floor(fraction * gradientSteps)]) end
+            if x and previousX then DrawLine(previousX, previousY, x, y, colors[math.floor(fraction * cfg.GradientSteps)]) end
             previousX, previousY = x, y
         end
     end
 
-    local function BodyShape(target, t)
+    function helper.BodyShape(target, t)
         local head = target.HeadPosition
         if not head then return nil end
         local feet = target.FeetPosition
@@ -1314,10 +1327,10 @@ do
             head += shift
             feet += shift
         end
-        return head, feet, target.Bottom, head.Y + headTop
+        return head, feet, target.Bottom, head.Y + cfg.HeadTop
     end
 
-    local function PointInBody(point, head, feet, bottom, top)
+    function helper.PointInBody(point, head, feet, bottom, top)
         if point.Y < bottom or point.Y > top then return false end
         local ax, az = feet.X, feet.Z
         local dx, dz = head.X - ax, head.Z - az
@@ -1327,39 +1340,42 @@ do
             s = math.clamp(((point.X - ax) * dx + (point.Z - az) * dz) / lengthSquared, 0, 1)
         end
         local offX, offZ = point.X - (ax + dx * s), point.Z - (az + dz * s)
-        return offX * offX + offZ * offZ <= hitRadius * hitRadius
+        return offX * offX + offZ * offZ <= cfg.HitRadius * cfg.HitRadius
     end
 
-    local function SegmentHits(a, b, target, t)
-        local head, feet, bottom, top = BodyShape(target, t)
+    function helper.SegmentHits(a, b, target, t)
+        local head, feet, bottom, top = helper.BodyShape(target, t)
         if not head then return false end
-        for i = 0, hitSamples do
-            if PointInBody(a + (b - a) * (i / hitSamples), head, feet, bottom, top) then return true end
+        local samples = cfg.HitSamples
+        for i = 0, samples do
+            if helper.PointInBody(a + (b - a) * (i / samples), head, feet, bottom, top) then return true end
         end
         return false
     end
 
-    local function BuildArc(origin, velocity, endY)
-        local rise = velocity.Y + daggerGravity * daggerLag / 2
-        local drop = if endY then origin.Y - endY else daggerMaxDrop
-        local discriminant = rise * rise + 2 * daggerGravity * drop
+    function helper.BuildArc(origin, velocity, endY)
+        local rise = velocity.Y + cfg.Gravity * cfg.Lag / 2
+        local drop = if endY then origin.Y - endY else cfg.MaxDrop
+        local discriminant = rise * rise + 2 * cfg.Gravity * drop
         if discriminant < 0 then return nil end
-        local endTime = math.min(daggerMaxTime, (rise + math.sqrt(discriminant)) / daggerGravity)
-        local steps = math.max(1, math.ceil(endTime / daggerStep))
+        local endTime = math.min(cfg.MaxTime, (rise + math.sqrt(discriminant)) / cfg.Gravity)
+        local steps = math.max(1, math.ceil(endTime / cfg.Step))
+        local points = state.ArcPoints
         for i = 0, steps do
             local t = endTime * i / steps
-            arcPoints[i] = origin + velocity * t - Vector3.new(0, daggerGravity * t * (t - daggerLag) / 2, 0)
+            points[i] = origin + velocity * t - Vector3.new(0, cfg.Gravity * t * (t - cfg.Lag) / 2, 0)
         end
         return steps, endTime
     end
 
-    local function ArcHits(origin, velocity, endY)
-        local steps, endTime = BuildArc(origin, velocity, endY)
+    function helper.ArcHits(origin, velocity, endY)
+        local steps, endTime = helper.BuildArc(origin, velocity, endY)
         if not steps then return false end
+        local points = state.ArcPoints
         for i = 1, steps do
             local t = endTime * i / steps
-            for _, target in targets do
-                if SegmentHits(arcPoints[i - 1], arcPoints[i], target, t) then return true end
+            for _, target in state.Targets do
+                if helper.SegmentHits(points[i - 1], points[i], target, t) then return true end
             end
         end
         return false
@@ -1369,7 +1385,7 @@ do
         local horizontal = speed * math.cos(angle)
         if horizontal <= 1e-3 then return -math.huge, 0 end
         local t = distance / horizontal
-        return speed * math.sin(angle) * t - daggerGravity * t * (t - daggerLag) / 2, t
+        return speed * math.sin(angle) * t - cfg.Gravity * t * (t - cfg.Lag) / 2, t
     end
 
     world.VeilAim.SolvePitch = function(speed, distance, rise)
@@ -1394,7 +1410,7 @@ do
         local head = target.HeadPosition
         if not head or not target.Position then return nil end
         local origin, look = cframe.Position, cframe.LookVector
-        local centre = Vector3.new(target.Position.X, (target.Bottom + head.Y + headTop) / 2, target.Position.Z)
+        local centre = Vector3.new(target.Position.X, (target.Bottom + head.Y + cfg.HeadTop) / 2, target.Position.Z)
         local toCentre = centre - origin
         if toCentre.Magnitude < 1 then return nil end
         if not locked and math.deg(math.acos(math.clamp(look:Dot(toCentre.Unit), -1, 1))) > world.VeilAim.Fov then return nil end
@@ -1421,24 +1437,25 @@ do
         camera.lookAt(position, position + blended.Unit)
     end
 
-    local function DrawArc(origin, velocity, startOffset, endY, colors)
-        local steps = BuildArc(origin, velocity, endY)
+    function helper.DrawArc(origin, velocity, startOffset, endY, colors)
+        local steps = helper.BuildArc(origin, velocity, endY)
         if not steps then return end
+        local points = state.ArcPoints
         local previousX, previousY
         for i = 0, steps do
             local fraction = i / steps
-            local point = arcPoints[i]
+            local point = points[i]
             if startOffset then point += startOffset * (1 - fraction) end
             local x, y = Project(point.X, point.Y, point.Z, if startOffset then .05 else nil)
-            if x and previousX then DrawLine(previousX, previousY, x, y, colors[math.floor(fraction * gradientSteps)]) end
+            if x and previousX then DrawLine(previousX, previousY, x, y, colors[math.floor(fraction * cfg.GradientSteps)]) end
             previousX, previousY = x, y
         end
     end
 
-    local function TargetBody()
+    function helper.TargetBody()
         if not frame.Ready then return nil end
         local best, bestDistance
-        for _, target in targets do
+        for _, target in state.Targets do
             local position = target.Position
             local x = position and Project(position.X, position.Y, position.Z)
             if x and x >= 0 and x <= frame.HalfWidth * 2 then
@@ -1449,20 +1466,20 @@ do
         return best
     end
 
-    local function EnemyArc(thrower)
+    function helper.EnemyArc(thrower)
         local rootPosition, rootFrame = thrower.Root.Position, thrower.Root.CFrame
         if not rootPosition or not rootFrame then thrower.Origin = nil return end
-        local origin = rootPosition + Vector3.new(0, daggerHeight, 0)
+        local origin = rootPosition + Vector3.new(0, cfg.Height, 0)
         local look = rootFrame.LookVector
         if look.Magnitude < .01 then thrower.Origin = nil return end
         local farthest
-        for _, target in targets do
+        for _, target in state.Targets do
             if target.Team == "Survivors" and target.Position then
                 local distance = (target.Position - origin).Magnitude
                 if not farthest or distance > farthest then farthest = distance end
             end
         end
-        local ownPosition = ownIsSurvivor and ownRoot and ownRoot.Position
+        local ownPosition = state.OwnIsSurvivor and state.OwnRoot and state.OwnRoot.Position
         if ownPosition then
             local distance = (ownPosition - origin).Magnitude
             if not farthest or distance > farthest then farthest = distance end
@@ -1472,29 +1489,29 @@ do
     end
 
     UpdateDaggerAim = function(now, reset)
-        if reset then throwers, targets, motions, nextRefresh = {}, {}, {}, 0 end
-        if now >= nextRefresh then
-            nextRefresh = NextSlot(now, .25)
-            Refresh()
+        if reset then state.Throwers, state.Targets, state.Motions, state.NextRefresh = {}, {}, {}, 0 end
+        if now >= state.NextRefresh then
+            state.NextRefresh = NextSlot(now, .25)
+            helper.Refresh()
             now = tick()
         end
-        if #throwers == 0 then return false end
-        for _, target in targets do
+        if #state.Throwers == 0 then return false end
+        for _, target in state.Targets do
             local position = target.Root.Position
             local head, left, right = target.Head.Position, target.LeftLeg.Position, target.RightLeg.Position
             if position and head and left and right then
                 target.Position, target.HeadPosition = position, head
                 target.FeetPosition = (left + right) / 2
-                target.Bottom = math.min(left.Y, right.Y) - legHalfHeight
-                UpdateMotion(target.Motion, position, now)
+                target.Bottom = math.min(left.Y, right.Y) - cfg.LegHalfHeight
+                helper.UpdateMotion(target.Motion, position, now)
             else
                 target.Position, target.HeadPosition = nil, nil
             end
         end
         local leftHeld = ismouse1pressed()
-        if leftHeld == true then charge.HeldSince = charge.HeldSince or now else charge.HeldSince = nil end
-        for _, thrower in throwers do
-            UpdateAimState(thrower.State, thrower.Animator, now)
+        if leftHeld == true then state.Charge.HeldSince = state.Charge.HeldSince or now else state.Charge.HeldSince = nil end
+        for _, thrower in state.Throwers do
+            helper.UpdateAimState(thrower.State, thrower.Animator, now)
             thrower.Aiming = thrower.State.Aiming == true and (not thrower.IsLocal or leftHeld == true)
             if thrower.IsLocal then
                 local aim = world.VeilAim
@@ -1505,15 +1522,15 @@ do
                 if aim.Enabled and camera and thrower.Aiming and world.KillerType == "Veil" then
                     local target
                     if aim.Locked then
-                        for _, candidate in targets do
+                        for _, candidate in state.Targets do
                             if candidate.Root == aim.Locked then target = candidate end
                         end
                     end
                     local locked = target ~= nil
-                    target = target or TargetBody()
+                    target = target or helper.TargetBody()
                     if target then
                         local cframe = camera.CFrame
-                        local want = aim.Solve(cframe, target, charge.At(now), locked)
+                        local want = aim.Solve(cframe, target, helper.ChargeAt(now), locked)
                         if want and keyHeld then
                             aim.Locked = target.Root
                             aim.Steer(camera, cframe.Position, cframe.LookVector, want)
@@ -1524,16 +1541,16 @@ do
             if thrower.Aiming then
                 if thrower.IsLocal then
                     local camera = workspace.CurrentCamera
-                    local target = TargetBody()
-                    local ownPosition = ownRoot and ownRoot.Position
-                    local endY = if target then target.Bottom elseif ownPosition then ownPosition.Y - groundOffset else nil
+                    local target = helper.TargetBody()
+                    local ownPosition = state.OwnRoot and state.OwnRoot.Position
+                    local endY = if target then target.Bottom elseif ownPosition then ownPosition.Y - cfg.GroundOffset else nil
                     thrower.EndY = endY
                     if camera then
                         local cframe = camera.CFrame
-                        thrower.Hit = ArcHits(cframe.Position, cframe.LookVector * charge.At(now), endY)
+                        thrower.Hit = helper.ArcHits(cframe.Position, cframe.LookVector * helper.ChargeAt(now), endY)
                     end
                 else
-                    EnemyArc(thrower)
+                    helper.EnemyArc(thrower)
                 end
             end
         end
@@ -1542,8 +1559,8 @@ do
 
     RenderDaggerTrajectory = function()
         local now = tick()
-        if ismouse1pressed() == true then charge.HeldSince = charge.HeldSince or now else charge.HeldSince = nil end
-        for _, thrower in throwers do
+        if ismouse1pressed() == true then state.Charge.HeldSince = state.Charge.HeldSince or now else state.Charge.HeldSince = nil end
+        for _, thrower in state.Throwers do
             local point = thrower.IsLocal and thrower.Aiming and world.VeilAim.Enabled and world.VeilAim.MarkPoint
             if point then
                 local x, y = Project(point.X, point.Y, point.Z)
@@ -1559,10 +1576,10 @@ do
                     local look = Vector3.new(frame.LX, frame.LY, frame.LZ)
                     local right = Vector3.new(frame.RX, frame.RY, frame.RZ)
                     if bDaggerTrajectory then
-                        DrawArc(origin, look * charge.At(now), right * localRightOffset + look * localForwardOffset, thrower.EndY, if thrower.Hit then hitGradient else missGradient)
+                        helper.DrawArc(origin, look * helper.ChargeAt(now), right * cfg.LocalRightOffset + look * cfg.LocalForwardOffset, thrower.EndY, if thrower.Hit then state.HitGradient else state.MissGradient)
                     end
                 elseif bDaggerTrajectory and thrower.Origin and thrower.Finish then
-                    DrawStraight(thrower.Origin, thrower.Finish, gradient)
+                    helper.DrawStraight(thrower.Origin, thrower.Finish, state.Gradient)
                 end
             end
         end
