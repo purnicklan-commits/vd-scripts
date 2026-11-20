@@ -63,6 +63,9 @@ local thirdPerson = {
     _MouseConn  = nil,
     _RenderConn = nil,
 }
+-- forward declare — guard.Unload'da kullanmak için
+local TPDisable
+local TPEnable
 
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
@@ -197,9 +200,8 @@ function guard.Unload(reason)
     keyrelease(0x20)
     if _G.MatchaVDBlindRestore then _G.MatchaVDBlindRestore() end
     if moonwalk.Window then moonwalk.Window:destroy() end
-    -- third person temizliği
-    TPDisable()
-    UI.RemoveTab("Camera")
+    if TPDisable then pcall(TPDisable) end
+    pcall(UI.RemoveTab, "Camera")
     print("[MatchaVD] unloaded: " .. tostring(reason))
 end
 
@@ -366,10 +368,7 @@ if memoryReady then
     if not NameOffsetWorks(nameOffset) then
         local found
         for offset = 0, 0x200, 8 do
-            if NameOffsetWorks(offset) then
-                found = offset
-                break
-            end
+            if NameOffsetWorks(offset) then found = offset break end
         end
         if not found then print(string.format("[MatchaVD] Instance.Name offset 0x%X is wrong and no other offset matched, memory scans off", nameOffset)) end
         nameOffset = found
@@ -704,10 +703,7 @@ end
 
 local function UpdateCamera(now)
     local camera = workspace.CurrentCamera
-    if not camera then
-        frame.Ready = false
-        return
-    end
+    if not camera then frame.Ready = false return end
     local cframe = camera.CFrame
     local position, look, right, up = cframe.Position, cframe.LookVector, cframe.RightVector, cframe.UpVector
     local px, py, pz = position.X, position.Y, position.Z
@@ -752,24 +748,10 @@ local function DrawLine(x1, y1, x2, y2, color)
     usedLines += 1
     local entry = lines[usedLines]
     if not entry then return end
-    if entry.X1 ~= x1 or entry.Y1 ~= y1 then
-        entry.X1, entry.Y1 = x1, y1
-        entry.Object.From = Vector2.new(x1, y1)
-        stats.Writes += 1
-    end
-    if entry.X2 ~= x2 or entry.Y2 ~= y2 then
-        entry.X2, entry.Y2 = x2, y2
-        entry.Object.To = Vector2.new(x2, y2)
-        stats.Writes += 1
-    end
-    if entry.Color ~= color then
-        entry.Color = color
-        entry.Object.Color = color
-    end
-    if not entry.Visible then
-        entry.Visible = true
-        entry.Object.Visible = true
-    end
+    if entry.X1 ~= x1 or entry.Y1 ~= y1 then entry.X1, entry.Y1 = x1, y1 entry.Object.From = Vector2.new(x1, y1) stats.Writes += 1 end
+    if entry.X2 ~= x2 or entry.Y2 ~= y2 then entry.X2, entry.Y2 = x2, y2 entry.Object.To = Vector2.new(x2, y2) stats.Writes += 1 end
+    if entry.Color ~= color then entry.Color = color entry.Object.Color = color end
+    if not entry.Visible then entry.Visible = true entry.Object.Visible = true end
 end
 
 local texts = {}
@@ -793,23 +775,10 @@ local function DrawText(x, y, text, color)
     usedTexts += 1
     local entry = texts[usedTexts]
     if not entry then return end
-    if entry.X ~= x or entry.Y ~= y then
-        entry.X, entry.Y = x, y
-        entry.Object.Position = Vector2.new(x, y)
-        stats.Writes += 1
-    end
-    if entry.Text ~= text then
-        entry.Text = text
-        entry.Object.Text = text
-    end
-    if entry.Color ~= color then
-        entry.Color = color
-        entry.Object.Color = color
-    end
-    if not entry.Visible then
-        entry.Visible = true
-        entry.Object.Visible = true
-    end
+    if entry.X ~= x or entry.Y ~= y then entry.X, entry.Y = x, y entry.Object.Position = Vector2.new(x, y) stats.Writes += 1 end
+    if entry.Text ~= text then entry.Text = text entry.Object.Text = text end
+    if entry.Color ~= color then entry.Color = color entry.Object.Color = color end
+    if not entry.Visible then entry.Visible = true entry.Object.Visible = true end
 end
 
 local triangles = {}
@@ -831,26 +800,11 @@ local function DrawTriangle(x1, y1, x2, y2, x3, y3, color)
     usedTriangles += 1
     local entry = triangles[usedTriangles]
     if not entry then return end
-    if entry.X1 ~= x1 or entry.Y1 ~= y1 then
-        entry.X1, entry.Y1 = x1, y1
-        entry.Object.PointA = Vector2.new(x1, y1)
-    end
-    if entry.X2 ~= x2 or entry.Y2 ~= y2 then
-        entry.X2, entry.Y2 = x2, y2
-        entry.Object.PointB = Vector2.new(x2, y2)
-    end
-    if entry.X3 ~= x3 or entry.Y3 ~= y3 then
-        entry.X3, entry.Y3 = x3, y3
-        entry.Object.PointC = Vector2.new(x3, y3)
-    end
-    if entry.Color ~= color then
-        entry.Color = color
-        entry.Object.Color = color
-    end
-    if not entry.Visible then
-        entry.Visible = true
-        entry.Object.Visible = true
-    end
+    if entry.X1 ~= x1 or entry.Y1 ~= y1 then entry.X1, entry.Y1 = x1, y1 entry.Object.PointA = Vector2.new(x1, y1) end
+    if entry.X2 ~= x2 or entry.Y2 ~= y2 then entry.X2, entry.Y2 = x2, y2 entry.Object.PointB = Vector2.new(x2, y2) end
+    if entry.X3 ~= x3 or entry.Y3 ~= y3 then entry.X3, entry.Y3 = x3, y3 entry.Object.PointC = Vector2.new(x3, y3) end
+    if entry.Color ~= color then entry.Color = color entry.Object.Color = color end
+    if not entry.Visible then entry.Visible = true entry.Object.Visible = true end
 end
 
 local function DrawLabel(pose, text, color)
@@ -937,10 +891,7 @@ local function Highlight(pose, color, anyDistance)
     for i = 2, points do
         local value = order[i]
         local j = i - 1
-        while j >= 1 and Before(value, order[j]) do
-            order[j + 1] = order[j]
-            j -= 1
-        end
+        while j >= 1 and Before(value, order[j]) do order[j + 1] = order[j] j -= 1 end
         order[j + 1] = value
     end
     local count = 0
@@ -1068,10 +1019,7 @@ local function PastLocalPosition(now)
     local history = parry.History
     local chosen = history[1]
     for i = #history, 1, -1 do
-        if now - history[i].Time >= parryTuning.PastTime then
-            chosen = history[i]
-            break
-        end
+        if now - history[i].Time >= parryTuning.PastTime then chosen = history[i] break end
     end
     return chosen and chosen.Position
 end
@@ -1141,9 +1089,7 @@ local function UpdateParry(now)
         local last = history[#history]
         if last and now - last.Time > .5 then table.clear(history) end
         history[#history + 1] = {Time = now, Position = parry.LocalPosition}
-        while #history > 2 and now - history[2].Time >= parryTuning.PastTime do
-            table.remove(history, 1)
-        end
+        while #history > 2 and now - history[2].Time >= parryTuning.PastTime do table.remove(history, 1) end
     end
     ScanKillerTracks(now)
     if parry.Attack and now > parry.Attack.Ends then parry.Attack = nil end
@@ -1163,11 +1109,8 @@ local function DrawGroundCircle(cx, cy, cz, radius, color)
     local previousX, previousY = firstX, firstY
     for i = 1, parryCircleSegments do
         local x, y
-        if i == parryCircleSegments then
-            x, y = firstX, firstY
-        else
-            x, y = Project(cx + circleCos[i] * radius, cy, cz + circleSin[i] * radius)
-        end
+        if i == parryCircleSegments then x, y = firstX, firstY
+        else x, y = Project(cx + circleCos[i] * radius, cy, cz + circleSin[i] * radius) end
         if x and previousX then DrawLine(previousX, previousY, x, y, color) end
         previousX, previousY = x, y
     end
@@ -1179,10 +1122,7 @@ local function RenderParry()
     local now = tick()
     local position = killer.Root.Position or parry.KillerPosition
     local killerHistory = parry.KillerRenderHistory
-    if parry.KillerRenderRoot ~= killer.Root then
-        parry.KillerRenderRoot = killer.Root
-        table.clear(killerHistory)
-    end
+    if parry.KillerRenderRoot ~= killer.Root then parry.KillerRenderRoot = killer.Root table.clear(killerHistory) end
     local newest = killerHistory[#killerHistory]
     if newest and now - newest.Time > .5 then table.clear(killerHistory) end
     killerHistory[#killerHistory + 1] = {Time = now, Position = position}
@@ -1224,12 +1164,9 @@ local UpdateDaggerAim, RenderDaggerTrajectory, RebuildDaggerGradient
 
 do
     local aimAnimations = {
-        ["77303734522729"] = "Hold",
-        ["87436543050891"] = "Hold",
-        ["79809716042968"] = "Hold",
-        ["122765810542358"] = "Hold",
-        ["101443662521580"] = "Throw",
-        ["127622545856523"] = "Throw",
+        ["77303734522729"] = "Hold", ["87436543050891"] = "Hold",
+        ["79809716042968"] = "Hold", ["122765810542358"] = "Hold",
+        ["101443662521580"] = "Throw", ["127622545856523"] = "Throw",
     }
     local charge = {Max = 163.5, Min = 68, PerSecond = 156, Offset = 6.3}
     charge.At = function(now)
@@ -1302,9 +1239,7 @@ do
                         local motion = motions[id] or {}
                         newMotions[id] = motion
                         roots[#roots + 1] = {
-                            Team = team,
-                            Motion = motion,
-                            Root = otherRoot,
+                            Team = team, Motion = motion, Root = otherRoot,
                             Head = character:FindFirstChild("Head") or otherRoot,
                             LeftLeg = character:FindFirstChild("Left Leg") or otherRoot,
                             RightLeg = character:FindFirstChild("Right Leg") or otherRoot,
@@ -1334,22 +1269,14 @@ do
                 local animation = memory_read("uintptr_t", track + trackAnimationOffset)
                 local kind = Valid(animation) and aimAnimations[ReadAnimationId(animation)]
                 local isNew = not previous or not previous[track]
-                if kind == "Hold" then
-                    holding = true
-                    if isNew then state.Aiming = true end
-                elseif kind == "Throw" and isNew then
-                    state.Aiming = false
-                    state.ThrownAt = now
-                end
+                if kind == "Hold" then holding = true if isNew then state.Aiming = true end
+                elseif kind == "Throw" and isNew then state.Aiming = false state.ThrownAt = now end
             end
             node = memory_read("uintptr_t", node)
         end
         if state.ThrownAt == now then state.Aiming = false end
-        if holding then
-            state.LastHold = now
-        elseif state.Aiming and (not state.LastHold or now - state.LastHold > aimTimeout) then
-            state.Aiming = false
-        end
+        if holding then state.LastHold = now
+        elseif state.Aiming and (not state.LastHold or now - state.LastHold > aimTimeout) then state.Aiming = false end
         state.Tracks = current
     end
 
@@ -1361,11 +1288,8 @@ do
         end
         if dt < .05 then return end
         local delta = position - motion.LastPosition
-        if delta.Magnitude > .03 then
-            motion.Velocity = motion.Velocity * .5 + (delta / dt) * .5
-        else
-            motion.Velocity = motion.Velocity * .7
-        end
+        if delta.Magnitude > .03 then motion.Velocity = motion.Velocity * .5 + (delta / dt) * .5
+        else motion.Velocity = motion.Velocity * .7 end
         motion.LastPosition, motion.LastTime = position, now
     end
 
@@ -1519,9 +1443,7 @@ do
             local x = position and Project(position.X, position.Y, position.Z)
             if x and x >= 0 and x <= frame.HalfWidth * 2 then
                 local distance = math.abs(x - frame.HalfWidth)
-                if not bestDistance or distance < bestDistance then
-                    best, bestDistance = target, distance
-                end
+                if not bestDistance or distance < bestDistance then best, bestDistance = target, distance end
             end
         end
         return best
@@ -1529,16 +1451,10 @@ do
 
     local function EnemyArc(thrower)
         local rootPosition, rootFrame = thrower.Root.Position, thrower.Root.CFrame
-        if not rootPosition or not rootFrame then
-            thrower.Origin = nil
-            return
-        end
+        if not rootPosition or not rootFrame then thrower.Origin = nil return end
         local origin = rootPosition + Vector3.new(0, daggerHeight, 0)
         local look = rootFrame.LookVector
-        if look.Magnitude < .01 then
-            thrower.Origin = nil
-            return
-        end
+        if look.Magnitude < .01 then thrower.Origin = nil return end
         local farthest
         for _, target in targets do
             if target.Team == "Survivors" and target.Position then
@@ -1660,10 +1576,7 @@ local function RefreshWorld(now)
     world.LocalRoot = character and character:FindFirstChild("HumanoidRootPart")
     local killerCharacter
     for _, other in Players:GetPlayers() do
-        if TeamName(other) == "Killer" then
-            killerCharacter = other.Character
-            break
-        end
+        if TeamName(other) == "Killer" then killerCharacter = other.Character break end
     end
     if killerCharacter ~= world.KillerCharacter then world.NextKillerType = 0 end
     world.KillerCharacter = killerCharacter
@@ -1772,10 +1685,7 @@ do
                             local cube = MemoryChildNames(child).Cube
                             local position = cube and MemoryPosition(cube)
                             Budget(20)
-                            if position then
-                                traps[child] = {Position = position}
-                                known[child] = "Trap"
-                            end
+                            if position then traps[child] = {Position = position} known[child] = "Trap" end
                         elseif wantZombies then
                             firstSeen[child] = firstSeen[child] or now
                             local names = MemoryChildNames(child)
@@ -1846,12 +1756,8 @@ do
         local killerPosition, localPosition = parry.KillerPosition, parry.LocalPosition
         local shouldCrouch = crouch ~= nil and killerPosition ~= nil and localPosition ~= nil
             and (localPosition - killerPosition).Magnitude <= crouch.Config.Range
-        if shouldCrouch and not crouching then
-            keypress(crouchKey)
-            crouching = true
-        elseif not shouldCrouch and crouching then
-            ReleaseCrouch()
-        end
+        if shouldCrouch and not crouching then keypress(crouchKey) crouching = true
+        elseif not shouldCrouch and crouching then ReleaseCrouch() end
     end
 end
 
@@ -1898,14 +1804,8 @@ local UpdateInfoHud, RenderInfoHud
 do
     local style = {
         File = "vd_hud.txt",
-        TitleHeight = 18,
-        LineHeight = 16,
-        TextSize = 14,
-        CharWidth = 7,
-        Padding = 6,
-        GripSize = 10,
-        MinWidth = 140,
-        MaxLines = 32,
+        TitleHeight = 18, LineHeight = 16, TextSize = 14, CharWidth = 7,
+        Padding = 6, GripSize = 10, MinWidth = 140, MaxLines = 32,
         Background = Color3.fromRGB(20, 20, 24),
         Bar = Color3.fromRGB(45, 45, 55),
         TextColor = Color3.fromRGB(235, 235, 235),
@@ -1925,12 +1825,8 @@ do
             {Attribute = "LakeMist", Name = "Invisible", Kind = "Bool", TrueColor = style.Failing},
             {Attribute = "Pursuit", Name = "Pursuiting", Kind = "Bool", TrueColor = style.Failing},
         },
-        Butcher = {
-            {Attribute = "Beartraps", Name = "Bear traps available", Kind = "Number"},
-        },
-        Killer = {
-            {Attribute = "Frenzy", Name = "Killer frenzy", Kind = "Bool", TrueColor = style.Failing},
-        },
+        Butcher = {{Attribute = "Beartraps", Name = "Bear traps available", Kind = "Number"}},
+        Killer = {{Attribute = "Frenzy", Name = "Killer frenzy", Kind = "Bool", TrueColor = style.Failing}},
         Masked = {
             {Attribute = "Mask", Name = "Mask type", Kind = "Text", OtherColor = style.Working, Values = {
                 Tony = {Text = "Lethal punches", Color = style.Working},
@@ -1978,7 +1874,6 @@ do
     local function Show(entry, visible)
         if entry.Visible ~= visible then entry.Visible = visible entry.Object.Visible = visible end
     end
-
     local function Place(entry, key, x, y)
         x, y = math.floor(x + .5), math.floor(y + .5)
         if entry[key .. "X"] ~= x or entry[key .. "Y"] ~= y then
@@ -1986,7 +1881,6 @@ do
             entry.Object[key] = Vector2.new(x, y)
         end
     end
-
     local function Set(entry, key, value)
         if entry[key] ~= value then entry[key] = value entry.Object[key] = value end
     end
@@ -2065,10 +1959,7 @@ do
 
     local function HandleMouse()
         local mouse = hud.Mouse
-        if not mouse then
-            mouse = Players.LocalPlayer:GetMouse()
-            hud.Mouse = mouse
-        end
+        if not mouse then mouse = Players.LocalPlayer:GetMouse() hud.Mouse = mouse end
         local down = ismouse1pressed() == true
         local x, y = mouse.X, mouse.Y
         if down and not hud.WasDown then
@@ -2083,18 +1974,13 @@ do
             writefile(style.File, string.format("%d %d %d", math.floor(hud.X), math.floor(hud.Y), math.floor(hud.Width)))
         end
         hud.WasDown = down
-        if hud.Drag == "Move" then
-            hud.X, hud.Y = x + hud.OffsetX, y + hud.OffsetY
-        elseif hud.Drag == "Resize" then
-            hud.Width = math.max(x + hud.OffsetX - hud.X, style.MinWidth)
-        end
+        if hud.Drag == "Move" then hud.X, hud.Y = x + hud.OffsetX, y + hud.OffsetY
+        elseif hud.Drag == "Resize" then hud.Width = math.max(x + hud.OffsetX - hud.X, style.MinWidth) end
     end
 
     local function ReadPerks(now)
         local killer = world.KillerCharacter
-        if killer ~= hud.PerkKiller then
-            hud.PerkKiller, hud.Perks, hud.NextPerks = killer, {}, 0
-        end
+        if killer ~= hud.PerkKiller then hud.PerkKiller, hud.Perks, hud.NextPerks = killer, {}, 0 end
         if not killer or now < hud.NextPerks then return end
         hud.NextPerks = now + 5
         local perks = {}
@@ -2111,14 +1997,8 @@ do
     UpdateInfoHud = function(now)
         HandleMouse()
         ReadPerks(now)
-        if now >= hud.NextRead then
-            hud.NextRead = now + .06
-            ReadNextAttribute()
-        end
-        if now >= hud.NextKiller then
-            hud.NextKiller = NextSlot(now, .37)
-            RefreshLines()
-        end
+        if now >= hud.NextRead then hud.NextRead = now + .06 ReadNextAttribute() end
+        if now >= hud.NextKiller then hud.NextKiller = NextSlot(now, .37) RefreshLines() end
     end
 
     RenderInfoHud = function(visible)
@@ -2229,31 +2109,16 @@ do
                     used += 1
                     local radius = math.max(pumpkin.Radius * frame.Focal / depth, 2)
                     local object = entry.Object
-                    if entry.X ~= x or entry.Y ~= y then
-                        entry.X, entry.Y = x, y
-                        object.Position = Vector2.new(x, y)
-                    end
-                    if entry.Radius ~= radius then
-                        entry.Radius = radius
-                        object.Radius = radius
-                    end
-                    if entry.Color ~= pumpkinColor then
-                        entry.Color = pumpkinColor
-                        object.Color = pumpkinColor
-                    end
-                    if not entry.Visible then
-                        entry.Visible = true
-                        object.Visible = true
-                    end
+                    if entry.X ~= x or entry.Y ~= y then entry.X, entry.Y = x, y object.Position = Vector2.new(x, y) end
+                    if entry.Radius ~= radius then entry.Radius = radius object.Radius = radius end
+                    if entry.Color ~= pumpkinColor then entry.Color = pumpkinColor object.Color = pumpkinColor end
+                    if not entry.Visible then entry.Visible = true object.Visible = true end
                 end
             end
         end
         for index = used + 1, #circles do
             local entry = circles[index]
-            if entry.Visible then
-                entry.Visible = false
-                entry.Object.Visible = false
-            end
+            if entry.Visible then entry.Visible = false entry.Object.Visible = false end
         end
     end
 end
@@ -2290,13 +2155,9 @@ do
     end
 end
 
--- ── THIRD PERSON FUNCTIONS ──────────────────────────────────────────
--- forward declare ederek guard.Unload'da kullanılabilir hale getir
-local TPDisable_ref
-
-local function TPEnable()
+-- ── THIRD PERSON IMPLEMENT ──────────────────────────────────────────
+TPEnable = function()
     if thirdPerson._RenderConn then return end
-
     thirdPerson._MouseConn = UIS.InputChanged:Connect(function(input, processed)
         if processed then return end
         if input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -2308,7 +2169,6 @@ local function TPEnable()
             )
         end
     end)
-
     thirdPerson._RenderConn = RunService.RenderStepped:Connect(function()
         if not thirdPerson.Enabled then return end
         if world.LocalTeam ~= "Killer" then return end
@@ -2316,7 +2176,6 @@ local function TPEnable()
         if not root then return end
         local camera = workspace.CurrentCamera
         if not camera then return end
-
         local yawRad   = math.rad(thirdPerson.Yaw)
         local pitchRad = math.rad(thirdPerson.Pitch)
         local cosP     = math.cos(pitchRad)
@@ -2325,22 +2184,16 @@ local function TPEnable()
             math.sin(pitchRad),
             math.cos(yawRad) * cosP
         ) * thirdPerson.Distance
-
         local rootPos = root.Position
-        local camPos  = rootPos
-            + Vector3.new(0, thirdPerson.Height, 0)
-            - back
-            + root.CFrame.RightVector * thirdPerson.Shoulder
-
-        local lookAt = rootPos + Vector3.new(0, thirdPerson.Height * 0.5, 0)
+        local camPos  = rootPos + Vector3.new(0, thirdPerson.Height, 0) - back + root.CFrame.RightVector * thirdPerson.Shoulder
+        local lookAt  = rootPos + Vector3.new(0, thirdPerson.Height * 0.5, 0)
         camera.CameraType = Enum.CameraType.Scriptable
         camera.CFrame     = CFrame.lookAt(camPos, lookAt)
     end)
-
     UIS.MouseBehavior = Enum.MouseBehavior.LockCenter
 end
 
-local function TPDisable()
+TPDisable = function()
     if thirdPerson._MouseConn  then thirdPerson._MouseConn:Disconnect()  end
     if thirdPerson._RenderConn then thirdPerson._RenderConn:Disconnect() end
     thirdPerson._MouseConn  = nil
@@ -2349,7 +2202,6 @@ local function TPDisable()
     if camera then camera.CameraType = Enum.CameraType.Custom end
     UIS.MouseBehavior = Enum.MouseBehavior.Default
 end
-TPDisable_ref = TPDisable
 
 local function Render()
     local started = os.clock()
@@ -2384,10 +2236,7 @@ local function Render()
             parry.DotShownX, parry.DotShownY = parry.DotX, parry.DotY
             dot.Position = Vector2.new(parry.DotX, parry.DotY)
         end
-        if parry.DotShownColor ~= parry.DotColor then
-            parry.DotShownColor = parry.DotColor
-            dot.Color = parry.DotColor
-        end
+        if parry.DotShownColor ~= parry.DotColor then parry.DotShownColor = parry.DotColor dot.Color = parry.DotColor end
         if not dot.Visible then dot.Visible = true end
     elseif dot.Visible then
         dot.Visible = false
@@ -2409,11 +2258,7 @@ local function Render()
         local entry = texts[index]
         if entry.Visible then entry.Visible = false entry.Object.Visible = false end
     end
-    if bDebugStats then
-        stats.Renders += 1
-        stats.Lines = usedLines
-        stats.RenderTime += os.clock() - started
-    end
+    if bDebugStats then stats.Renders += 1 stats.Lines = usedLines stats.RenderTime += os.clock() - started end
 end
 
 AddJob("Main", false, function()
@@ -2445,11 +2290,7 @@ AddJob("Main", false, function()
             GrowLines()
             GrowTexts()
             GrowTriangles()
-            if now >= world.NextRefresh then
-                world.NextRefresh = NextSlot(now, 0)
-                RefreshWorld(now)
-                now = tick()
-            end
+            if now >= world.NextRefresh then world.NextRefresh = NextSlot(now, 0) RefreshWorld(now) now = tick() end
             if now >= nextMapCheck then
                 nextMapCheck = now + 2
                 map = workspace:FindFirstChild("Map")
@@ -2467,10 +2308,7 @@ AddJob("Main", false, function()
                 generatorFolder = trackers.Generators.Address
                 RestartWindows(tick())
             end
-            if bPalletESP or bAutoPallet then
-                UpdateTracker(trackers.Pallets, map, now)
-                UpdatePallets(tick())
-            end
+            if bPalletESP or bAutoPallet then UpdateTracker(trackers.Pallets, map, now) UpdatePallets(tick()) end
             if bAutoPallet then UpdateAutoPallet(tick()) end
             if bAutoCrouch then UpdateAutoCrouch(tick()) else ReleaseCrouch() end
             if bZombieESP then UpdateZombiePositions() end
@@ -2478,11 +2316,8 @@ AddJob("Main", false, function()
             if bInfoHud then UpdateInfoHud(tick()) end
             if bWindowESP and map and restorePending then
                 restorePending = false
-                if RestoreWindows(map) then
-                    stableScans = windowStableScans
-                else
-                    windows, windowPaths.Parents = {}, {}
-                end
+                if RestoreWindows(map) then stableScans = windowStableScans
+                else windows, windowPaths.Parents = {}, {} end
             end
             if bWindowESP and map and stableScans < windowStableScans and tick() >= nextWindowScan then
                 local count = ScanWindows(map)
@@ -2495,11 +2330,7 @@ AddJob("Main", false, function()
                 windowCount = count or windowCount
                 nextWindowScan = tick() + windowScanInterval
             end
-            if bDebugStats then
-                stats.Loops += 1
-                stats.LoopTime += os.clock() - started
-                PrintStats(tick())
-            end
+            if bDebugStats then stats.Loops += 1 stats.LoopTime += os.clock() - started PrintStats(tick()) end
             Sleep(loopInterval)
         end
     end
@@ -2528,9 +2359,7 @@ AddJob("Skill check", true, function()
     local nextFind = 0
     local pressed, lastNeedle, lastGoal, step, movedAt, seenNeedle = false, 0, 0, 0, 0, nil
 
-    local function Angle(value)
-        return value % 360
-    end
+    local function Angle(value) return value % 360 end
 
     local function DetectLayout()
         local anyVisible = false
@@ -2539,11 +2368,7 @@ AddJob("Skill check", true, function()
                 anyVisible = true
                 local needle = memory_read("float", line.Address + candidate.Rotation)
                 local rise = candidate.Last and needle and Angle(needle - candidate.Last)
-                if rise and rise >= .2 and rise <= 40 then
-                    candidate.Rises += 1
-                else
-                    candidate.Rises = 0
-                end
+                if rise and rise >= .2 and rise <= 40 then candidate.Rises += 1 else candidate.Rises = 0 end
                 candidate.Last = needle
                 if candidate.Rises >= 3 then
                     visibleOffsetUsed, guiRotationOffset = candidate.Visible, candidate.Rotation
@@ -2571,12 +2396,8 @@ AddJob("Skill check", true, function()
     local function ZoneStart()
         local goalRotation = memory_read("float", goal.Address + guiRotationOffset)
         if memory_read("byte", goal.Address + visibleOffsetUsed) == 1 or math.abs(goalRotation) >= 1 then return goalRotation end
-        if trapPerfect and memory_read("byte", trapPerfect.Address + visibleOffsetUsed) == 1 then
-            return memory_read("float", trapPerfect.Address + guiRotationOffset)
-        end
-        if trapGoal and memory_read("byte", trapGoal.Address + visibleOffsetUsed) == 1 then
-            return memory_read("float", trapGoal.Address + guiRotationOffset)
-        end
+        if trapPerfect and memory_read("byte", trapPerfect.Address + visibleOffsetUsed) == 1 then return memory_read("float", trapPerfect.Address + guiRotationOffset) end
+        if trapGoal and memory_read("byte", trapGoal.Address + visibleOffsetUsed) == 1 then return memory_read("float", trapGoal.Address + guiRotationOffset) end
         return nil
     end
 
@@ -2586,16 +2407,9 @@ AddJob("Skill check", true, function()
             Sleep(.5)
         else
             local now = tick()
-            if now >= nextFind and (lastNeedle == 0 or not (check and line and goal)) then
-                nextFind = now + 1
-                Find()
-            end
+            if now >= nextFind and (lastNeedle == 0 or not (check and line and goal)) then nextFind = now + 1 Find() end
             if check and line and goal and not guiRotationOffset then
-                if DetectLayout() then
-                    stats.Skill += 1
-                    Sleep(1 / 60)
-                    continue
-                end
+                if DetectLayout() then stats.Skill += 1 Sleep(1 / 60) continue end
             elseif check and line and goal then
                 local needle = memory_read("float", line.Address + guiRotationOffset)
                 if needle ~= seenNeedle then seenNeedle, movedAt = needle, now end
@@ -2612,10 +2426,7 @@ AddJob("Skill check", true, function()
                     if zone and not pressed and step > 0 and diff + step / 2 >= skillCheckAngle and diff <= 114 then
                         pressed = true
                         keypress(0x20)
-                        task.spawn(function()
-                            wait(.03)
-                            keyrelease(0x20)
-                        end)
+                        task.spawn(function() wait(.03) keyrelease(0x20) end)
                     end
                 else
                     pressed, lastNeedle, step = false, 0, 0
@@ -2688,10 +2499,7 @@ do
             for index = first, #numeric do
                 local entry = numeric[index]
                 if entry.Addr - numeric[first].Addr > clusterSpan then break end
-                if not picked[entry.Entry.key] then
-                    picked[entry.Entry.key] = entry.Entry
-                    count += 1
-                end
+                if not picked[entry.Entry.key] then picked[entry.Entry.key] = entry.Entry count += 1 end
             end
             if count == #keys then
                 local entries = {}
@@ -2704,10 +2512,7 @@ do
 
     local function Scan(desired)
         local ok, result = pcall(getgc, keys)
-        if not ok or type(result) ~= "table" then
-            print("[MatchaVD] fast vault: getgc failed: " .. tostring(result))
-            return nil
-        end
+        if not ok or type(result) ~= "table" then print("[MatchaVD] fast vault: getgc failed: " .. tostring(result)) return nil end
         local numeric = {}
         for _, entry in result do
             local addr = tonumber(entry.addr)
@@ -2739,19 +2544,14 @@ do
     local function Apply(entries, values)
         if not guard.SameServer() then return false end
         local ok, err = pcall(applygc, entries, values)
-        if not ok then
-            print("[MatchaVD] fast vault: applygc failed: " .. tostring(err))
-            return false
-        end
+        if not ok then print("[MatchaVD] fast vault: applygc failed: " .. tostring(err)) return false end
         _G.MatchaVDVaultApplied = values
         return true
     end
 
     local function SameValues(a, b)
         if not a or not b then return false end
-        for _, key in keys do
-            if not Matches(a[key], b[key]) then return false end
-        end
+        for _, key in keys do if not Matches(a[key], b[key]) then return false end end
         return true
     end
 
@@ -2760,9 +2560,7 @@ do
 
     local function SaveEntries(list)
         local saved = {}
-        for _, entry in list do
-            saved[#saved + 1] = {Key = entry.key, Addr = string.format("%.0f", tonumber(entry.addr) or 0)}
-        end
+        for _, entry in list do saved[#saved + 1] = {Key = entry.key, Addr = string.format("%.0f", tonumber(entry.addr) or 0)} end
         if not isfolder(saveFolder) then makefolder(saveFolder) end
         writefile(saveFile, HttpService:JSONEncode({JobId = game.JobId, Entries = saved}))
     end
@@ -2781,17 +2579,12 @@ do
             list[#list + 1] = {key = item.Key, type = "number", addr = addr, value = slot.value}
             found[item.Key] = true
         end
-        for _, key in keys do
-            if not found[key] then return nil end
-        end
+        for _, key in keys do if not found[key] then return nil end end
         return list
     end
 
     local session = _G.MatchaVDVaultScan
-    if not session or session.JobId ~= game.JobId then
-        session = {JobId = game.JobId}
-        _G.MatchaVDVaultScan = session
-    end
+    if not session or session.JobId ~= game.JobId then session = {JobId = game.JobId} _G.MatchaVDVaultScan = session end
     if not session.Entries then session.Entries = LoadEntries() end
     local entries = session.Entries
     vault.Ready = entries ~= nil
@@ -2811,10 +2604,7 @@ do
         vault.Scanning = true
         local window = moonwalk.Window
         local wasVisible = window and window.Visible
-        if window then
-            window.Visible, window.Open, window.Drag = false, nil, nil
-            window.InputBlocked = false
-        end
+        if window then window.Visible, window.Open, window.Drag = false, nil, nil window.InputBlocked = false end
         setrobloxinput(true)
         local camera = workspace.CurrentCamera
         local size = camera and camera.ViewportSize
@@ -2832,10 +2622,7 @@ do
 
     vault.ScanNow = function()
         if entries or vault.Scanning or requested then return end
-        if world.LocalTeam ~= "Survivors" then
-            notify("You need to be a survivor to scan for always fast vault.", "Fast vault", 4)
-            return
-        end
+        if world.LocalTeam ~= "Survivors" then notify("You need to be a survivor to scan for always fast vault.", "Fast vault", 4) return end
         requested = "Manual"
     end
 
@@ -2843,10 +2630,7 @@ do
         while Running() do
             if requested then
                 requested = false
-                if not entries then
-                    ScanWithPopup()
-                    if not entries then notify("Scan failed, try again.", "Fast vault", 4) end
-                end
+                if not entries then ScanWithPopup() if not entries then notify("Scan failed, try again.", "Fast vault", 4) end end
             end
             if entries then
                 local wanted = if vault.Enabled then FastValues() else gameDefaults
@@ -2880,18 +2664,13 @@ do
     end
 
     AddJob("Moonwalk", true, function()
-        if not autoRotateOffset then
-            print("[MatchaVD] moonwalk: no Humanoid.AutoRotate offset, moonwalk off")
-            return
-        end
+        if not autoRotateOffset then print("[MatchaVD] moonwalk: no Humanoid.AutoRotate offset, moonwalk off") return end
         local humanoid, root, character, nextLookup = nil, nil, nil, 0
         local disabled = false
-
         local function Restore()
             if disabled and humanoid and guard.SameServer() then memory_write("byte", humanoid + autoRotateOffset, 1) end
             disabled = false
         end
-
         while Running() do
             local now = tick()
             if now >= nextLookup then
@@ -2906,9 +2685,7 @@ do
                 end
             end
             if moonwalk.Enabled and moonwalk.Mode == "Blatant" and humanoid and isrbxactive() and iskeypressed(keyS) and guard.SameServer() then
-                if memory_read("byte", humanoid + autoRotateOffset) == 1 then
-                    memory_write("byte", humanoid + autoRotateOffset, 0)
-                end
+                if memory_read("byte", humanoid + autoRotateOffset) == 1 then memory_write("byte", humanoid + autoRotateOffset, 0) end
                 disabled = true
                 FaceCamera(root)
                 Sleep(1 / 60)
@@ -3036,17 +2813,11 @@ if UILib then
     colors:color({Name = "Bear trap", Flag = "vd_trap_col", Default = trapColor, Callback = function(c) trapColor = c end})
     colors:color({Name = "Cure zombie", Flag = "vd_zombie_col", Default = zombieColor, Callback = function(c) zombieColor = c end})
     colors:color({Name = "Pumpkin", Flag = "vd_pumpkin_col", Default = pumpkinColor, Callback = function(c) pumpkinColor = c end})
-    colors:color({Name = "Enemy dagger start", Flag = "vd_dagger_start", Default = daggerColor, Callback = function(c)
-        daggerColor = c
-        RebuildDaggerGradient()
-    end})
-    colors:color({Name = "Enemy dagger end", Flag = "vd_dagger_end", Default = daggerEndColor, Callback = function(c)
-        daggerEndColor = c
-        RebuildDaggerGradient()
-    end})
+    colors:color({Name = "Enemy dagger start", Flag = "vd_dagger_start", Default = daggerColor, Callback = function(c) daggerColor = c RebuildDaggerGradient() end})
+    colors:color({Name = "Enemy dagger end", Flag = "vd_dagger_end", Default = daggerEndColor, Callback = function(c) daggerEndColor = c RebuildDaggerGradient() end})
     colors:color({Name = "React parry range", Flag = "vd_parry_col", Default = parryRangeColor, Callback = function(c) parryRangeColor = c end})
 
-    -- ── CAMERA TAB (UILib window içinde) ────────────────────────────
+    -- ── CAMERA TAB ───────────────────────────────────────────────────
     local cameraTab = window:tab("Camera")
     local cam = cameraTab:section("Third Person (Killer only)")
     cam:toggle({Name = "Third person", Flag = "vd_tp_enabled", Default = false, Callback = Bool(function(v)
@@ -3054,26 +2825,13 @@ if UILib then
         if v then TPEnable() else TPDisable() end
     end)})
     cam:keybind({Name = "Toggle key", Flag = "vd_tp_kb", Default = 0x56})
-    cam:slider({Name = "Distance (studs)", Flag = "vd_tp_dist", Min = 4, Max = 35, Default = 14, Callback = function(v)
-        thirdPerson.Distance = tonumber(v) or 14
-    end})
-    cam:slider({Name = "Height (studs)", Flag = "vd_tp_height", Min = 1, Max = 20, Default = 6, Callback = function(v)
-        thirdPerson.Height = tonumber(v) or 6
-    end})
-    cam:slider({Name = "Shoulder offset", Flag = "vd_tp_shoulder", Min = -4, Max = 4, Float = true, Step = 0.5, Format = "%.1f", Default = 1.5, Callback = function(v)
-        thirdPerson.Shoulder = tonumber(v) or 1.5
-    end})
-    cam:slider({Name = "Mouse sensitivity", Flag = "vd_tp_sens", Min = 0.05, Max = 1.5, Float = true, Format = "%.2f", Default = 0.35, Callback = function(v)
-        thirdPerson.Sensitivity = tonumber(v) or 0.35
-    end})
-    cam:slider({Name = "Min pitch (deg)", Flag = "vd_tp_minpitch", Min = -90, Max = 0, Default = -70, Callback = function(v)
-        thirdPerson.MinPitch = tonumber(v) or -70
-    end})
-    cam:slider({Name = "Max pitch (deg)", Flag = "vd_tp_maxpitch", Min = 0, Max = 90, Default = 80, Callback = function(v)
-        thirdPerson.MaxPitch = tonumber(v) or 80
-    end})
+    cam:slider({Name = "Distance (studs)", Flag = "vd_tp_dist", Min = 4, Max = 35, Default = 14, Callback = function(v) thirdPerson.Distance = tonumber(v) or 14 end})
+    cam:slider({Name = "Height (studs)", Flag = "vd_tp_height", Min = 1, Max = 20, Default = 6, Callback = function(v) thirdPerson.Height = tonumber(v) or 6 end})
+    cam:slider({Name = "Shoulder offset", Flag = "vd_tp_shoulder", Min = -4, Max = 4, Float = true, Step = 0.5, Format = "%.1f", Default = 1.5, Callback = function(v) thirdPerson.Shoulder = tonumber(v) or 1.5 end})
+    cam:slider({Name = "Mouse sensitivity", Flag = "vd_tp_sens", Min = 0.05, Max = 1.5, Float = true, Format = "%.2f", Default = 0.35, Callback = function(v) thirdPerson.Sensitivity = tonumber(v) or 0.35 end})
+    cam:slider({Name = "Min pitch (deg)", Flag = "vd_tp_minpitch", Min = -90, Max = 0, Default = -70, Callback = function(v) thirdPerson.MinPitch = tonumber(v) or -70 end})
+    cam:slider({Name = "Max pitch (deg)", Flag = "vd_tp_maxpitch", Min = 0, Max = 90, Default = 80, Callback = function(v) thirdPerson.MaxPitch = tonumber(v) or 80 end})
 
-    -- toggle key polling — UILib keybind V tuşu ile toggle
     task.spawn(function()
         local wasDown = false
         while Running() do
@@ -3099,7 +2857,6 @@ else
     print("[MatchaVD] UI library failed to load, running without a menu")
 end
 
--- ── Matcha native UI.AddTab fallback (UILib yoksa) ──────────────────
 if not UILib then
     UI.AddTab("Camera", function(tab)
         local sec = tab:Section("Third Person (Killer only)", "Left")
